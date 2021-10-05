@@ -1,0 +1,191 @@
+---
+title: "sales_forecast"
+author: "Kshitija Hire"
+date: "02/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+install.packages("fpp3")
+install.packages("forecast")
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(fpp3)
+library(forecast)
+library(tseries)
+library(tibble)
+
+```
+
+
+
+
+```{r}
+train_sales = read_csv("/Users/kshitija/Downloads/australian-stores-demand-forecasting/train.csv")
+test_sales = read_csv("/Users/kshitija/Downloads/australian-stores-demand-forecasting/test.csv")
+```
+
+
+```{r}
+head(train_sales)
+```
+
+```{r}
+# Change the date format
+#The default format is yyyy-mm-dd
+train_sales$Date <- as.Date(train_sales$Date, format = "%d-%b-%y")
+train_sales
+
+```
+
+```{r}
+# tibble tsibble ts
+sales_ts <- ts(train_sales$Sales, start = c(2017,1), end = c(2021,6), frequency = 12)
+sales_ts
+```
+
+
+```{r}
+summary(sales_ts)
+```
+
+```{r}
+autoplot(sales_ts) +
+  ggtitle("Time Plot : Sales of all item from all stores per day") +
+  ylab("Sales")
+```
+
+
+```{r}
+plot(sales_ts)
+abline(reg = lm(sales_ts ~ time(sales_ts)))
+
+```
+
+```{r}
+plot(aggregate(sales_ts, FUN = mean))
+```
+
+The Trend component of Time series is not present
+Check for seasonality 
+
+
+   
+
+```{r}
+#boxplot to check for seasonality
+boxplot(sales_ts~cycle(sales_ts)) 
+grid() 
+```
+The sales takes a dip at the end of the year (November, December) and rises as the new year begins (January, February) 
+The maximum sales throughout the year are observed in the month of August. 
+
+Lets take a deeper dive into seasonality. 
+
+
+```{r}
+#season subseries
+sales_ts %>% ggseasonplot(sales_ts)
+```
+
+There is no seasonality present. 
+
+```{r}
+ggsubseriesplot(sales_ts)
+```
+When investigating a time series, one of the first things to check before building an ARIMA model is to check that the series is stationary. That is, it needs to be determined that the time series is constant in mean and variance are constant and not dependent on time.
+
+```{r}
+# Steps taken to stationarize the Time series
+autoplot(sales_ts)
+
+# Make mean constant with Time
+plot((diff(sales_ts)))
+
+# Make SD constant with Time
+plot((log(sales_ts)))
+
+```
+
+
+```{r}
+# Make both mean and SD constant with Time
+Y <- diff(log(sales_ts))
+plot(Y)
+
+
+```
+
+
+```{r}
+# Test the time series data using Augmented Dickey–Fuller (ADF) t-statistic test for unit root
+adf.test(sales_ts)
+
+```
+
+
+```{r}
+# Determine the value of q 
+acf(Y) # q = 0
+```
+
+```{r}
+# Determine the value of p
+pacf(Y) # p = 6
+```
+
+```{r}
+# Seasonal Naive
+fit <- snaive(Y) 
+print(summary(fit))
+checkresiduals(fit)
+#Residual sd: 0.6371 
+```
+```{r}
+# Fit ETS model
+fit_ets <- ets(Y)
+print(summary(fit_ets))
+checkresiduals(fit_ets)
+# Residual sd/sigma:  0.3893
+
+```
+```{r}
+# Fit ARIMA model
+fit_arima <- auto.arima(sales_ts, d=1, D=1, stepwise = FALSE, approximation = FALSE, trace = TRUE)
+print(summary(fit_arima))
+checkresiduals(fit_arima)
+# Residual sd = 4.426059
+```
+
+
+```{r}
+# Manually fitting ARIMA
+fit_m_arima <- arima(log(sales_ts), c(1,0,0), seasonal = list(order = c(1,1,0), period = 12))
+print(summary(fit_m_arima))
+checkresiduals(fit_m_arima)
+# Residual sd = 0.4118252
+```
+
+
+```{r}
+fcst <- forecast(fit_arima, h = 6)
+autoplot(fcst)
+```
+
+```{r}
+fit_arima
+pred <- predict(fit_arima, n.ahead = 1*6)
+pred
+
+```
+
+
